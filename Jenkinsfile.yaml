@@ -12,14 +12,6 @@ spec:
       command:
         - cat
       tty: true
-    - name: lhci
-      image: docker.io/patrickhulce/lhci-client:0.12.0
-      command:
-        - cat
-      tty: true
-      securityContext:
-        runAsUser: 0
-        privileged: true
       volumeMounts:
         - name: m2-cache
           mountPath: /root/.m2
@@ -39,6 +31,14 @@ spec:
       securityContext:
         runAsUser: 0
         privileged: true
+    - name: lhci
+      image: docker.io/patrickhulce/lhci-client:0.12.0
+      command:
+        - cat
+      tty: true
+      securityContext:
+        runAsUser: 0
+        privileged: true
   volumes:
     - name: m2-cache
       hostPath:
@@ -47,7 +47,6 @@ spec:
 '''
         }
     }
-
     environment {
         APP_NAME = getPomArtifactId()
         APP_VERSION = getPomVersionNoQualifier()
@@ -63,15 +62,12 @@ spec:
         IMAGE_GA_LATEST = "$IMAGE_NAME:latest" // tag for latest GA version
         EPHTEST_CONTAINER_NAME = "ephtest-$APP_NAME-snapshot-$BUILD_NUMBER"
         EPHTEST_BASE_URL = "http://$EPHTEST_CONTAINER_NAME:$APP_LISTENING_PORT".concat("/$APP_CONTEXT_ROOT".replace('//', '/'))
-
         // credentials
         KUBERNETES_CLUSTER_CRED_ID = 'k3s-lima-vm-kubeconfig'
         CONTAINER_REGISTRY_CRED = credentials("docker-hub-$IMAGE_ORG")
         LIGHTHOUSE_TOKEN = credentials("ci-lighthouse-token-$APP_NAME")
         LIGHTHOUSE_URL = credentials('ci-lighthouse-url')
     }
-
-    
     stages {
             stage('Prepare environment') {
                 steps {
