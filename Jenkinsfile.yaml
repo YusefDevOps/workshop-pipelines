@@ -99,22 +99,24 @@ spec:
                 sh './mvnw compile'
             }
         }
-
-        stage('Unit tests') {
+        stage('Code inspection & quality gate') {
             steps {
-                echo '-=- execute unit tests -=-'
-                sh './mvnw test org.jacoco:jacoco-maven-plugin:report'
-                junit 'target/surefire-reports/*.xml'
-                jacoco execPattern: 'target/jacoco.exec'
+                echo '-=- run code inspection & check quality gate -=-'
+                withSonarQubeEnv('ci-sonarqube') {
+                    sh './mvnw sonar:sonar'
+                }
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
             }
         }
-
         stage('Mutation tests') {
             steps {
                 echo '-=- execute mutation tests -=-'
                 sh './mvnw org.pitest:pitest-maven:mutationCoverage'
             }
         }
+
         stage('Software composition analysis') {
             steps {
                 echo '-=- run software composition analysis -=-'
@@ -165,6 +167,14 @@ spec:
                 }
             }
         }
+        stage('Unit tests') {
+            steps {
+                echo '-=- execute unit tests -=-'
+                sh './mvnw test org.jacoco:jacoco-maven-plugin:report'
+                junit 'target/surefire-reports/*.xml'
+                jacoco execPattern: 'target/jacoco.exec'
+            }
+        }
         stage('Integration tests') {
             steps {
                 echo '-=- execute integration tests -=-'
@@ -186,14 +196,19 @@ spec:
                 perfReport sourceDataFiles: 'target/jmeter/results/*.csv'
             }
         }
-        stage('Code inspection & quality gate') {
+        
+        stage('Web page performance analysis') {
             steps {
-                echo '-=- run code inspection & check quality gate -=-'
-                withSonarQubeEnv('ci-sonarqube') {
-                    sh './mvnw sonar:sonar'
-                }
-                timeout(time: 10, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                echo '-=- execute web page performance analysis -=-'
+                container('lhci') {
+                    sh """
+                      cd $WORKSPACE
+                      git config --global --add safe.directory $WORKSPACE
+                      export LHCI_BUILD_CONTEXT__CURRENT_BRANCH=$GIT_BRANCH
+                      lhci collect --collect.settings.chromeFlags='--no-sandbox' --url ${EPHTEST_BASE_URL}hello
+                      lhci assert --preset=lighthouse:recommended --includePassedAssertions
+                      lhci upload --token $LIGHTHOUSE_TOKEN --serverBaseUrl $LIGHTHOUSE_URL --ignoreDuplicateBuildFailure
+                    """
                 }
             }
         }
@@ -207,21 +222,6 @@ spec:
                     sh "podman push $CONTAINER_REGISTRY_URL/$IMAGE_GA"
                     sh "podman tag $IMAGE_SNAPSHOT $CONTAINER_REGISTRY_URL/$IMAGE_GA_LATEST"
                     sh "podman push $CONTAINER_REGISTRY_URL/$IMAGE_GA_LATEST"
-                }
-            }
-        }
-        stage('Web page performance analysis') {
-            steps {
-                echo '-=- execute web page performance analysis -=-'
-                container('lhci') {
-                    sh """
-                      cd $WORKSPACE
-                      git config --global --add safe.directory $WORKSPACE
-                      export LHCI_BUILD_CONTEXT__CURRENT_BRANCH=$GIT_BRANCH
-                      lhci collect --collect.settings.chromeFlags='--no-sandbox' --url ${EPHTEST_BASE_URL}hello
-                      lhci assert --preset=lighthouse:recommended --includePassedAssertions
-                      lhci upload --token $LIGHTHOUSE_TOKEN --serverBaseUrl $LIGHTHOUSE_URL --ignoreDuplicateBuildFailure
-                    """
                 }
             }
         }
